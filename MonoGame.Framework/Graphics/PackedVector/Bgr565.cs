@@ -13,6 +13,13 @@ namespace Microsoft.Xna.Framework.Graphics.PackedVector
     {
         UInt16 _packedValue;
 
+        private static UInt16 Pack(float x, float y, float z)
+        {
+            return (UInt16) ((((int) Math.Round(MathHelper.Clamp(x, 0, 1) * 31.0f) & 0x1F) << 11) |
+                (((int) Math.Round(MathHelper.Clamp(y, 0, 1) * 63.0f) & 0x3F) << 5) |
+                ((int) Math.Round(MathHelper.Clamp(z, 0, 1) * 31.0f) & 0x1F));
+        }
+
         /// <summary>
         /// Creates a new instance of Bgr565.
         /// </summary>
@@ -21,9 +28,7 @@ namespace Microsoft.Xna.Framework.Graphics.PackedVector
         /// <param name="z">The z component</param>
         public Bgr565(float x, float y, float z)
         {
-            _packedValue = (UInt16)((((int)(x * 31.0f) & 0x1F) << 11) |
-                (((int)(y * 63.0f) & 0x3F) << 5) |
-                ((int)(z * 31.0f) & 0x1F));
+            _packedValue = Pack(x, y, z);
         }
 
         /// <summary>
@@ -32,9 +37,7 @@ namespace Microsoft.Xna.Framework.Graphics.PackedVector
         /// <param name="vector">Vector containing the components for the packed vector.</param>
         public Bgr565(Vector3 vector)
         {
-            _packedValue = (UInt16)((((int)(vector.X * 31.0f) & 0x1F) << 11) |
-                (((int)(vector.Y * 63.0f) & 0x3F) << 5) |
-                ((int)(vector.Z * 31.0f) & 0x1F));
+            _packedValue = Pack(vector.X, vector.Y, vector.Z);
         }
 
         /// <summary>
@@ -80,7 +83,7 @@ namespace Microsoft.Xna.Framework.Graphics.PackedVector
         /// Gets the packed vector in Vector4 format.
         /// </summary>
         /// <returns>The packed vector in Vector4 format</returns>
-        Vector4 IPackedVector.ToVector4()
+        public Vector4 ToVector4()
         {
             return new Vector4(ToVector3(), 1.0f);
         }

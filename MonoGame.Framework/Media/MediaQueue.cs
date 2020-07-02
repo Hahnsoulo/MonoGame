@@ -1,3 +1,7 @@
+// MonoGame - Copyright (C) The MonoGame Team
+// This file is subject to the terms and conditions defined in
+// file 'LICENSE.txt', which is part of this source code package.
+
 using System;
 using System.Collections.Generic;
 
@@ -8,7 +12,7 @@ namespace Microsoft.Xna.Framework.Media
         List<Song> songs = new List<Song>();
 		private int _activeSongIndex = -1;
 		private Random random = new Random();
-		
+
 		public MediaQueue()
 		{
 			
@@ -27,8 +31,14 @@ namespace Microsoft.Xna.Framework.Media
 		
 		public int ActiveSongIndex
 		{
-			get { return _activeSongIndex; }
-			set { _activeSongIndex = value; }
+		    get
+		    {
+		        return _activeSongIndex;
+		    }
+		    set
+		    {
+		        _activeSongIndex = value;
+		    }
 		}
 
         internal int Count
@@ -36,6 +46,14 @@ namespace Microsoft.Xna.Framework.Media
             get
             {
                 return songs.Count;
+            }
+        }
+
+        public Song this[int index]
+        {
+            get
+            {
+                return songs[index];
             }
         }
 

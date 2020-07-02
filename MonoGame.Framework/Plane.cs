@@ -1,32 +1,9 @@
-﻿#region License
-/*
-MIT License
-Copyright © 2006 The Mono.Xna Team
-
-All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-#endregion License
+﻿// MIT License - Copyright (C) The Mono.Xna Team
+// This file is subject to the terms and conditions defined in
+// file 'LICENSE.txt', which is part of this source code package.
 
 using System;
-using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.Serialization;
 
 namespace Microsoft.Xna.Framework
@@ -59,6 +36,7 @@ namespace Microsoft.Xna.Framework
     }
 	
     [DataContract]
+    [DebuggerDisplay("{DebugDisplayString,nq}")]
     public struct Plane : IEquatable<Plane>
     {
         #region Public Fields
@@ -92,7 +70,7 @@ namespace Microsoft.Xna.Framework
             Vector3 ac = c - a;
 
             Vector3 cross = Vector3.Cross(ab, ac);
-            Normal = Vector3.Normalize(cross);
+            Vector3.Normalize(ref cross, out Normal);
             D = -(Vector3.Dot(Normal, a));
         }
 
@@ -100,6 +78,21 @@ namespace Microsoft.Xna.Framework
             : this(new Vector3(a, b, c), d)
         {
 
+        }
+
+        /// <summary>
+        /// Create a <see cref="Plane"/> that contains the specified point and has the specified <see cref="Normal"/> vector.
+        /// </summary>
+        /// <param name="pointOnPlane">A point the created <see cref="Plane"/> should contain.</param>
+        /// <param name="normal">The normal of the plane.</param>
+        public Plane(Vector3 pointOnPlane, Vector3 normal)
+        {
+            Normal = normal;
+            D = -(
+                pointOnPlane.X * normal.X +
+                pointOnPlane.Y * normal.Y +
+                pointOnPlane.Z * normal.Z
+            );
         }
 
         #endregion Constructors
@@ -136,37 +129,74 @@ namespace Microsoft.Xna.Framework
         {
             result = ((this.Normal.X * value.X) + (this.Normal.Y * value.Y)) + (this.Normal.Z * value.Z);
         }
-        
-        /*
-        public static void Transform(ref Plane plane, ref Quaternion rotation, out Plane result)
-        {
-            throw new NotImplementedException();
-        }
 
-        public static void Transform(ref Plane plane, ref Matrix matrix, out Plane result)
-        {
-            throw new NotImplementedException();
-        }
-
-        public static Plane Transform(Plane plane, Quaternion rotation)
-        {
-            throw new NotImplementedException();
-        }
-
+        /// <summary>
+        /// Transforms a normalized plane by a matrix.
+        /// </summary>
+        /// <param name="plane">The normalized plane to transform.</param>
+        /// <param name="matrix">The transformation matrix.</param>
+        /// <returns>The transformed plane.</returns>
         public static Plane Transform(Plane plane, Matrix matrix)
         {
-            throw new NotImplementedException();
+            Plane result;
+            Transform(ref plane, ref matrix, out result);
+            return result;
         }
-        */
+
+        /// <summary>
+        /// Transforms a normalized plane by a matrix.
+        /// </summary>
+        /// <param name="plane">The normalized plane to transform.</param>
+        /// <param name="matrix">The transformation matrix.</param>
+        /// <param name="result">The transformed plane.</param>
+        public static void Transform(ref Plane plane, ref Matrix matrix, out Plane result)
+        {
+            // See "Transforming Normals" in http://www.glprogramming.com/red/appendixf.html
+            // for an explanation of how this works.
+
+            Matrix transformedMatrix;
+            Matrix.Invert(ref matrix, out transformedMatrix);
+            Matrix.Transpose(ref transformedMatrix, out transformedMatrix);
+
+            var vector = new Vector4(plane.Normal, plane.D);
+
+            Vector4 transformedVector;
+            Vector4.Transform(ref vector, ref transformedMatrix, out transformedVector);
+
+            result = new Plane(transformedVector);
+        }
+
+        /// <summary>
+        /// Transforms a normalized plane by a quaternion rotation.
+        /// </summary>
+        /// <param name="plane">The normalized plane to transform.</param>
+        /// <param name="rotation">The quaternion rotation.</param>
+        /// <returns>The transformed plane.</returns>
+        public static Plane Transform(Plane plane, Quaternion rotation)
+        {
+            Plane result;
+            Transform(ref plane, ref rotation, out result);
+            return result;
+        }
+
+        /// <summary>
+        /// Transforms a normalized plane by a quaternion rotation.
+        /// </summary>
+        /// <param name="plane">The normalized plane to transform.</param>
+        /// <param name="rotation">The quaternion rotation.</param>
+        /// <param name="result">The transformed plane.</param>
+        public static void Transform(ref Plane plane, ref Quaternion rotation, out Plane result)
+        {
+            Vector3.Transform(ref plane.Normal, ref rotation, out result.Normal);
+            result.D = plane.D;
+        }
 
         public void Normalize()
         {
-			float factor;
-			Vector3 normal = Normal;
-			Normal = Vector3.Normalize(Normal);
-			factor = (float)Math.Sqrt(Normal.X * Normal.X + Normal.Y * Normal.Y + Normal.Z * Normal.Z) / 
-					(float)Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z);
-			D = D * factor;
+            float length = Normal.Length();
+            float factor =  1f / length;            
+            Vector3.Multiply(ref Normal, factor, out Normal);
+            D = D * factor;
         }
 
         public static Plane Normalize(Plane value)
@@ -178,11 +208,10 @@ namespace Microsoft.Xna.Framework
 
         public static void Normalize(ref Plane value, out Plane result)
         {
-			float factor;
-			result.Normal = Vector3.Normalize(value.Normal);
-			factor = (float)Math.Sqrt(result.Normal.X * result.Normal.X + result.Normal.Y * result.Normal.Y + result.Normal.Z * result.Normal.Z) / 
-					(float)Math.Sqrt(value.Normal.X * value.Normal.X + value.Normal.Y * value.Normal.Y + value.Normal.Z * value.Normal.Z);
-			result.D = value.D * factor;
+            float length = value.Normal.Length();
+            float factor =  1f / length;            
+            Vector3.Multiply(ref value.Normal, factor, out result.Normal);
+            result.D = value.D * factor;
         }
 
         public static bool operator !=(Plane plane1, Plane plane2)
@@ -220,12 +249,10 @@ namespace Microsoft.Xna.Framework
             box.Intersects (ref this, out result);
         }
 
-        /*
         public PlaneIntersectionType Intersects(BoundingFrustum frustum)
         {
             return frustum.Intersects(this);
         }
-        */
 
         public PlaneIntersectionType Intersects(BoundingSphere sphere)
         {
@@ -237,9 +264,45 @@ namespace Microsoft.Xna.Framework
             sphere.Intersects(ref this, out result);
         }
 
+        internal PlaneIntersectionType Intersects(ref Vector3 point)
+        {
+            float distance;
+            DotCoordinate(ref point, out distance);
+
+            if (distance > 0)
+                return PlaneIntersectionType.Front;
+
+            if (distance < 0)
+                return PlaneIntersectionType.Back;
+
+            return PlaneIntersectionType.Intersecting;
+        }
+
+        internal string DebugDisplayString
+        {
+            get
+            {
+                return string.Concat(
+                    this.Normal.DebugDisplayString, "  ",
+                    this.D.ToString()
+                    );
+            }
+        }
+
         public override string ToString()
         {
-            return string.Format("{{Normal:{0} D:{1}}}", Normal, D);
+            return "{Normal:" + Normal + " D:" + D + "}";
+        }
+
+        /// <summary>
+        /// Deconstruction method for <see cref="Plane"/>.
+        /// </summary>
+        /// <param name="normal"></param>
+        /// <param name="d"></param>
+        public void Deconstruct(out Vector3 normal, out float d)
+        {
+            normal = Normal;
+            d = D;
         }
 
         #endregion

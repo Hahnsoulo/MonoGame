@@ -1,176 +1,84 @@
+// MonoGame - Copyright (C) The MonoGame Team
+// This file is subject to the terms and conditions defined in
+// file 'LICENSE.txt', which is part of this source code package.
+
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-
-#if OPENGL
-#if MONOMAC
-using MonoMac.OpenGL;
-#elif WINDOWS || LINUX
-using OpenTK.Graphics.OpenGL;
-#endif
-#elif DIRECTX
-using SharpDX;
-using SharpDX.Direct3D11;
-#elif PSM
-// TODO!
-#endif
+using MonoGame.Utilities;
 
 namespace Microsoft.Xna.Framework.Graphics
 {
-	public class Texture3D : Texture
+	public partial class Texture3D : Texture
 	{
-        private int width;
-        private int height;
-        private int depth;
-
-#if DIRECTX
-        private bool renderTarget;
-        private bool mipMap;
-#endif
-		
-#if OPENGL
-		PixelInternalFormat glInternalFormat;
-		PixelFormat glFormat;
-		PixelType glType;
-#endif
+        private int _width;
+        private int _height;
+        private int _depth;
 
         public int Width
         {
-            get { return width; }
+            get { return _width; }
         }
 
         public int Height
         {
-            get { return height; }
+            get { return _height; }
         }
 
         public int Depth
         {
-            get { return depth; }
+            get { return _depth; }
         }
 
 		public Texture3D(GraphicsDevice graphicsDevice, int width, int height, int depth, bool mipMap, SurfaceFormat format)
             : this(graphicsDevice, width, height, depth, mipMap, format, false)
-		{		    
+		{
 		}
 
 		protected Texture3D (GraphicsDevice graphicsDevice, int width, int height, int depth, bool mipMap, SurfaceFormat format, bool renderTarget)
 		{
-            if (graphicsDevice == null)
-                throw new ArgumentNullException("graphicsDevice");
+		    if (graphicsDevice == null)
+		        throw new ArgumentNullException("graphicsDevice", FrameworkResources.ResourceCreationWhenDeviceIsNull);
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException("width","Texture width must be greater than zero");
+            if (height <= 0)
+                throw new ArgumentOutOfRangeException("height","Texture height must be greater than zero");
+            if (depth <= 0)
+                throw new ArgumentOutOfRangeException("depth","Texture depth must be greater than zero");
 
-			this.GraphicsDevice = graphicsDevice;
-            this.width = width;
-            this.height = height;
-            this.depth = depth;
+		    this.GraphicsDevice = graphicsDevice;
+            this._width = width;
+            this._height = height;
+            this._depth = depth;
             this._levelCount = 1;
 		    this._format = format;
 
-#if OPENGL
-			this.glTarget = TextureTarget.Texture3D;
-            
-            GL.GenTextures(1, out this.glTexture);
-            GraphicsExtensions.CheckGLError();
-
-			GL.BindTexture (glTarget, glTexture);
-            GraphicsExtensions.CheckGLError();
-
-			format.GetGLFormat (out glInternalFormat, out glFormat, out glType);
-
-			GL.TexImage3D (glTarget, 0, glInternalFormat, width, height, depth, 0, glFormat, glType, IntPtr.Zero);
-            GraphicsExtensions.CheckGLError();
-
-			if (mipMap) 
-                throw new NotImplementedException("Texture3D does not yet support mipmaps.");
-#elif DIRECTX
-            this.renderTarget = renderTarget;
-            this.mipMap = mipMap;
-
-            if (mipMap)
-                this._levelCount = CalculateMipLevels(width, height, depth);
-
-            // Create texture
-            GetTexture();
-#endif
+            PlatformConstruct(graphicsDevice, width, height, depth, mipMap, format, renderTarget);
         }
 
-#if DIRECTX
-
-        internal override SharpDX.Direct3D11.Resource CreateTexture()
-        {
-            var description = new Texture3DDescription
-            {
-                Width = width,
-                Height = height,
-                Depth = depth,
-                MipLevels = _levelCount,
-                Format = SharpDXHelper.ToFormat(_format),
-                BindFlags = BindFlags.ShaderResource,
-                CpuAccessFlags = CpuAccessFlags.None,
-                Usage = ResourceUsage.Default,
-                OptionFlags = ResourceOptionFlags.None,
-            };
-
-            if (renderTarget)
-            {
-                description.BindFlags |= BindFlags.RenderTarget;
-                if (mipMap)
-                {
-                    // Note: XNA 4 does not have a method Texture.GenerateMipMaps() 
-                    // because generation of mipmaps is not supported on the Xbox 360.
-                    // TODO: New method Texture.GenerateMipMaps() required.
-                    description.OptionFlags |= ResourceOptionFlags.GenerateMipMaps;
-                }
-            }
-
-            return new SharpDX.Direct3D11.Texture3D(GraphicsDevice._d3dDevice, description);
-        }
-
-#endif
-        
         public void SetData<T>(T[] data) where T : struct
 		{
-			SetData<T>(data, 0, data.Length);
+            if (data == null)
+                throw new ArgumentNullException("data");
+			SetData(data, 0, data.Length);
 		}
-		
+
 		public void SetData<T> (T[] data, int startIndex, int elementCount) where T : struct
 		{
-			SetData<T>(0, 0, 0, Width, Height, 0, Depth, data, startIndex, elementCount);
+			SetData(0, 0, 0, Width, Height, 0, Depth, data, startIndex, elementCount);
 		}
-		
+
 		public void SetData<T> (int level,
 		                        int left, int top, int right, int bottom, int front, int back,
 		                        T[] data, int startIndex, int elementCount) where T : struct
 		{
-			if (data == null) 
-				throw new ArgumentNullException("data");
+            ValidateParams(level, left, top, right, bottom, front, back, data, startIndex, elementCount);
 
-			var elementSizeInByte = Marshal.SizeOf(typeof(T));
-			var dataHandle = GCHandle.Alloc(data, GCHandleType.Pinned);
-			var dataPtr = (IntPtr)(dataHandle.AddrOfPinnedObject().ToInt64() + startIndex * elementSizeInByte);
-            int width = right - left;
-            int height = bottom - top;
-            int depth = back - front;
+            var width = right - left;
+            var height = bottom - top;
+            var depth = back - front;
 
-#if OPENGL
-            GL.BindTexture(glTarget, glTexture);
-            GraphicsExtensions.CheckGLError();
-			GL.TexSubImage3D(glTarget, level, left, top, front, width, height, depth, glFormat, glType, dataPtr);
-            GraphicsExtensions.CheckGLError();
-#elif DIRECTX
-            int rowPitch = GetPitch(width);
-            int slicePitch = rowPitch * height; // For 3D texture: Size of 2D image.
-            var box = new DataBox(dataPtr, rowPitch, slicePitch);
-
-            int subresourceIndex = level;
-
-            var region = new ResourceRegion(left, top, front, right, bottom, back);
-
-            var d3dContext = GraphicsDevice._d3dContext;
-            lock (d3dContext)
-                d3dContext.UpdateSubresource(box, GetTexture(), subresourceIndex, region);
-#endif
-            dataHandle.Free ();
+            PlatformSetData(level, left, top, right, bottom, front, back, data, startIndex, elementCount, width, height, depth);
 		}
 
         /// <summary>
@@ -189,87 +97,8 @@ namespace Microsoft.Xna.Framework.Graphics
         /// <param name="elementCount">Number of elements to get.</param>
         public void GetData<T>(int level, int left, int top, int right, int bottom, int front, int back, T[] data, int startIndex, int elementCount) where T : struct
         {
-            if (data == null || data.Length == 0)
-                throw new ArgumentException("data cannot be null");
-            if (data.Length < startIndex + elementCount)
-                throw new ArgumentException("The data passed has a length of " + data.Length + " but " + elementCount + " pixels have been requested.");
-
-            // Disallow negative box size
-            if ((left < 0 || left >= right)
-                || (top < 0 || top >= bottom)
-                || (front < 0 || front >= back))
-                throw new ArgumentException("Neither box size nor box position can be negative");
-#if IOS
-
-            // Reading back a texture from GPU memory is unsupported
-            // in OpenGL ES 2.0 and no work around has been implemented.           
-            throw new NotSupportedException("OpenGL ES 2.0 does not support texture reads.");
-
-#elif ANDROID
-
-            throw new NotImplementedException();
-
-#elif PSM
-
-            throw new NotImplementedException();
-
-#elif DIRECTX
-
-            // Create a temp staging resource for copying the data.
-            // 
-            // TODO: Like in Texture2D, we should probably be pooling these staging resources
-            // and not creating a new one each time.
-            //
-            var desc = new Texture3DDescription
-            {
-                Width = width,
-                Height = height,
-                Depth = depth,
-                MipLevels = 1,
-                Format = SharpDXHelper.ToFormat(_format),
-                BindFlags = BindFlags.None,
-                CpuAccessFlags = CpuAccessFlags.Read,
-                Usage = ResourceUsage.Staging,
-                OptionFlags = ResourceOptionFlags.None,
-            };
-
-            var d3dContext = GraphicsDevice._d3dContext;
-            using (var stagingTex = new SharpDX.Direct3D11.Texture3D(GraphicsDevice._d3dDevice, desc))
-            {
-                lock (d3dContext)
-                {
-                    // Copy the data from the GPU to the staging texture.
-                    d3dContext.CopySubresourceRegion(GetTexture(), level, new ResourceRegion(left, top, front, right, bottom, back), stagingTex, 0);
-
-                    // Copy the data to the array.
-                    DataStream stream;
-                    var databox = d3dContext.MapSubresource(stagingTex, 0, MapMode.Read, MapFlags.None, out stream);
-
-                    // Some drivers may add pitch to rows or slices.
-                    // We need to copy each row separatly and skip trailing zeros.
-                    var currentIndex = startIndex;
-                    var elementSize = SharpDX.Utilities.SizeOf<T>();
-                    var elementsInRow = right - left;
-                    var rowsInSlice = bottom - top;
-                    for (var slice = front; slice < back; slice++)
-                    {
-                        for (var row = top; row < bottom; row++)
-                        {
-                            stream.ReadRange(data, currentIndex, elementsInRow);
-                            stream.Seek(databox.RowPitch - (elementSize * elementsInRow), SeekOrigin.Current);
-                            currentIndex += elementsInRow;
-                        }
-                        stream.Seek(databox.SlicePitch - (databox.RowPitch * rowsInSlice), SeekOrigin.Current);
-                    }
-                    stream.Dispose();
-                }
-            }
-
-#else
-
-            throw new NotImplementedException();
-
-#endif
+            ValidateParams(level, left, top, right, bottom, front, back, data, startIndex, elementCount);
+            PlatformGetData(level, left, top, right, bottom, front, back, data, startIndex, elementCount);
         }
 
         /// <summary>
@@ -281,7 +110,7 @@ namespace Microsoft.Xna.Framework.Graphics
         /// <param name="elementCount">Number of elements to get.</param>
         public void GetData<T>(T[] data, int startIndex, int elementCount) where T : struct
         {
-            GetData(0, 0, 0, width, height, 0, depth, data, startIndex, elementCount);
+            GetData(0, 0, 0, _width, _height, 0, _depth, data, startIndex, elementCount);
         }
 
         /// <summary>
@@ -291,7 +120,45 @@ namespace Microsoft.Xna.Framework.Graphics
         /// <param name="data">Array of data.</param>
         public void GetData<T>(T[] data) where T : struct
         {
+            if (data == null)
+                throw new ArgumentNullException("data");
             GetData(data, 0, data.Length);
+        }
+
+        private void ValidateParams<T>(int level,
+		                        int left, int top, int right, int bottom, int front, int back,
+		                        T[] data, int startIndex, int elementCount) where T : struct
+        {
+            var texWidth = Math.Max(Width >> level, 1);
+            var texHeight = Math.Max(Height >> level, 1);
+            var texDepth = Math.Max(Depth >> level, 1);
+            var width = right - left;
+            var height = bottom - top;
+            var depth = back - front;
+
+            if (left < 0 || top < 0 || back < 0 || right > texWidth || bottom > texHeight || front > texDepth)
+                throw new ArgumentException("Area must remain inside texture bounds");
+            // Disallow negative box size
+            if (left >= right || top >= bottom || front >= back)
+                throw new ArgumentException("Neither box size nor box position can be negative");
+            if (level < 0 || level >= LevelCount)
+                throw new ArgumentException("level must be smaller than the number of levels in this texture.");
+            if (data == null)
+                throw new ArgumentNullException("data");
+            var tSize = ReflectionHelpers.SizeOf<T>.Get();
+            var fSize = Format.GetSize();
+            if (tSize > fSize || fSize % tSize != 0)
+                throw new ArgumentException("Type T is of an invalid size for the format of this texture.", "T");
+            if (startIndex < 0 || startIndex >= data.Length)
+                throw new ArgumentException("startIndex must be at least zero and smaller than data.Length.", "startIndex");
+            if (data.Length < startIndex + elementCount)
+                throw new ArgumentException("The data array is too small.");
+
+            var dataByteSize = width*height*depth*fSize;
+            if (elementCount * tSize != dataByteSize)
+                throw new ArgumentException(string.Format("elementCount is not the right size, " +
+                                            "elementCount * sizeof(T) is {0}, but data size is {1}.",
+                                            elementCount * tSize, dataByteSize), "elementCount");
         }
 	}
 }

@@ -38,20 +38,15 @@ namespace Microsoft.Xna.Framework.Content.Pipeline.Processors
         /// <returns>The built audio.</returns>
         public override SoundEffectContent Process(AudioContent input, ContentProcessorContext context)
         {
-            var targetFormat = ConversionFormat.Pcm;
+            if (input == null)
+                throw new ArgumentNullException("input");
+            if (context == null)
+                throw new ArgumentNullException("context");
 
-            switch (quality)
-            {
-                case ConversionQuality.Medium:
-                case ConversionQuality.Low:
-                    if ((context.TargetPlatform == TargetPlatform.iOS) || (context.TargetPlatform == TargetPlatform.MacOSX))
-                        targetFormat = ConversionFormat.ImaAdpcm;
-                    else
-                        targetFormat = ConversionFormat.Adpcm;
-                    break;
-            }
-
-            input.ConvertFormat(targetFormat, quality, null);
+            var profile = AudioProfile.ForPlatform(context.TargetPlatform);
+            var finalQuality = profile.ConvertAudio(context.TargetPlatform, quality, input);
+            if (quality != finalQuality)
+                context.Logger.LogMessage("Failed to convert using \"{0}\" quality, used \"{1}\" quality", quality, finalQuality);
 
             return new SoundEffectContent(input.Format.NativeWaveFormat, input.Data, input.LoopStart, input.LoopLength, (int)input.Duration.TotalMilliseconds);
         }
